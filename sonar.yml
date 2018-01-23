@@ -1,0 +1,79 @@
+---
+- hosts: localhost
+  become: yes
+  gather_facts: no
+  environment: 
+    JAVA_HOME: /usr/java/jdk1.8.0_151
+
+  tasks:
+    - name: upgrade all packages
+      yum: name=* state=latest
+
+    - name: download java
+      command: "wget --no-check-certificate --no-cookies --header 'Cookie: oraclelicense=accept-securebackup-cookie' http://download.oracle.com/otn-pub/java/jdk/8u151-b12/e758a0de34e24606bca991d704f6dcbf/jdk-8u151-linux-x64.rpm"
+
+    - name: Install java
+      command: sudo yum localinstall jdk-8u151-linux-x64.rpm -y
+  
+    - name: Install packages
+      yum: name={{ item }} state=present
+      ignore_errors: yes
+      with_items:
+      - wget
+      - epel-release
+      - unzip
+
+    - name: setting env for java sonar
+      shell: echo JAVA_HOME is $JAVA_HOME
+      environment: 
+        JAVA_HOME: /usr/java/jdk1.8.0_151
+    - shell: echo PATH is $PATH
+      environment:
+        PATH: $PATH:$JAVA_HOME:/sonar-scanner/sonar-scanner-3.0.3.778-linux/bin:.
+ 
+    - name: Unarchive a file that needs to be downloaded 
+      unarchive:
+        src: https://sonarsource.bintray.com/Distribution/sonarqube/sonarqube-6.5.zip
+        dest: /opt
+        remote_src: yes
+      become: true
+
+    - file:
+        src: /opt/sonarqube-6.5/bin/linux-x86-64/sonar.sh
+        dest: /usr/bin/sonar
+        state: link
+
+    - name: sonar file creation
+      file: 
+        dest: /etc/init.d/sonar
+        state: touch
+        mode: 0755    
+
+    - name: adding info to sonar file
+      blockinfile:
+        path: /etc/init.d/sonar
+        content: "#!/bin/sh \n##
+         \n #### rc file for SonarQube
+         \n ####
+         \n #### description: SonarQube system (www.sonarsource.org)
+         \n ####
+         \n ###### BEGIN INIT INFO
+         \n #### Provides: sonar
+         \n #### Required-Start: $network
+         \n #### Required-Stop: $network
+         \n #### Default-Start: 3 4 5
+         \n #### Default-Stop: 0 1 2 6
+         \n #### Short-Description: SonarQube system (www.sonarsource.org)
+         \n #### Description: SonarQube system (www.sonarsource.org)
+         \n ###### END INIT INFO
+         \n /usr/bin/sonar $*"
+         
+    - name: daemon reload
+      systemd:
+        daemon_reload: yes
+      become: true
+    - name: start sonar service
+      service:
+        name: sonar
+        state: started
+      become: true
